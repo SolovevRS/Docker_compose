@@ -1,0 +1,56 @@
+version: '3.8' # Specify a modern compose version
+
+services:
+  teamcity-server:
+    image: jetbrains/teamcity-server:2023.05.1
+    ports:
+      - "8111:8111"
+    volumes:
+      - teamcity-data:/data/teamcity_server/datadir
+      - teamcity-logs:/opt/teamcity/logs
+    environment:
+      # Explicitly set Java memory options for the server
+      - TEAMCITY_SERVER_MEM_OPTS="-Xmx2g
+      - TEAMCITY_SERVER_MEM_OPTS=-XX:ReservedCodeCacheSize=350m
+    restart: always
+    healthcheck:
+      # This check ensures the server is fully started and ready for connections
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8111/healthCheck/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s # Crucial: gives the server 2 minutes to initialize before checks begin
+
+  teamcity-agent:
+    build: # <--- THIS REPLACES THE 'image:' LINE
+      context: .
+      dockerfile: agent.Dockerfile
+    container_name: custom-teamcity-agent # Renamed for clarity, but optional
+    volumes:
+      # Use a named volume for the agent's configuration
+      - teamcity-agent-conf:/data/teamcity_agent/conf
+      - /home/roman/ansible:/ansible
+#      - /home/roman/teamcity/teamcity_agent/conf/agent_key:/home/buildagent/.ssh/ed25519:ro
+
+    environment:
+      - SERVER_URL=http://teamcity-server:8111
+      # - AGENT_NAME=my-custom-agent # Optional: uncomment to set a custom agent name
+#   user: root #"1000:1000"  # Good practice: Run as non-root to avoid permission issues
+    restart: always
+    depends_on:
+      teamcity-server:
+        # BEST PRACTICE: Wait for the server to be healthy, not just started
+        condition: service_healthy
+    # This healthcheck is good: it verifies the agent process is running.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "ps aux | grep -v grep | grep -q 'TeamCity/buildAgent/bin' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+# Top-level 'volumes' definition for Docker-managed volumes
+volumes:
+  teamcity-data:
+  teamcity-logs:
+  teamcity-agent-conf:
