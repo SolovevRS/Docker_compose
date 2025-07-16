@@ -1,1 +1,2 @@
-# teamcity-agent include ansible (Docker_compose)
+# teamcity-agent include ansible 
+#run docker compose with teamcity-server && custom teancity-agent with ansible
